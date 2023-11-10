@@ -1,36 +1,25 @@
-resource "aws_ecs_task_definition" "main" {
-  family                   = "${var.app}-service"
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
-  execution_role_arn       = var.execution_role_arn
-  task_role_arn            = var.task_role_arn
-  cpu                      = var.cpu_unit
-  memory                   = var.memory
-
-  container_definitions = data.template_file.main.rendered
+resource "aws_cloudwatch_event_rule" "cron_midnight" {
+  name                = "run_at_midnight"
+  description         = "Schedule trigger for run every day at midnight"
+  schedule_expression = "cron(*/1 * * * *)"
+  is_enabled          = true
 }
 
-data "template_file" "main" {
-  template = file("${path.module}/task_definition_${var.use_cloudwatch_logs ? "cloudwatch" : "elasticsearch"}.json")
+module "nameApp" {
+  source = "./tfecs"
 
-  vars = {
-    ecr_image_url  = var.repo_url
-    name           = var.app
-    name_index_log = lower(var.app)
-    listen_port    = var.listen_port
-    region         = var.region
-    environment    = jsonencode(concat(local.main_environment, var.environment_list))
-    prefix_logs    = var.prefix_logs
-    port           = var.listen_port
-    es_url         = var.es_url
-  }
-}
+  app = "nameApp"
 
-locals {
-  main_environment = [
-    {
-      name  = "APP",
-      value = var.app
-    }
-  ]
+  # Common inputs
+  execution_role_arn = aws_iam_role.ecs_exec.arn
+  task_role_arn      = aws_iam_role.ecs_task.arn
+  repo_url           = "${aws_ecr_repository.yourRepo.repository_url}:latest"
+  secret_name        = "Name secret"
+  secret_value_arn   = data.aws_secretsmanager_secret_version.yourSecret.arn
+  ecs_cluster        = aws_ecs_cluster.nameCluster.arn
+  ecs_event_role     = aws_iam_role.roleEvents.arn
+  security_groups    = [aws_security_group.yourSg.id]
+  subnets            = [ list of subnets ]
+  lambda_stream_arn  = "arn lambda to stream logs"
+  event_rule         = aws_cloudwatch_event_rule.cron_midnight.name
 }
